@@ -17,50 +17,46 @@ def rsa_encrypt(public_key, plaintext):
     e, n = public_key
     m = int.from_bytes(plaintext.encode(), byteorder='big')  # Convert plaintext to integer
     c = pow(m, e, n)  # Perform RSA encryption: c = m^e mod n
-    return c
+    return c, m  # Return ciphertext and original integer message
 
-# RSA Decryption with error handling for invalid UTF-8 encoding
+# RSA Decryption
 def rsa_decrypt(private_key, ciphertext):
     d, n = private_key
     m = pow(ciphertext, d, n)  # Perform RSA decryption: m = c^d mod n
-    try:
-        # Try to decode the plaintext back to a string
-        plaintext = m.to_bytes((m.bit_length() + 7) // 8, byteorder='big').decode()
-    except UnicodeDecodeError:
-        # If decoding fails, print a warning and return the raw byte data
-        return f"(Decryption resulted in invalid UTF-8 data: {m.to_bytes((m.bit_length() + 7) // 8, byteorder='big')})"
-    return plaintext
+    return m  # Return the decrypted integer
 
-
-# MITM RSA Attack: Modify Ciphertext
-def mitm_rsa_attack(public_key, original_ciphertext):
-    e, n = public_key
-    # Mallory modifies the original ciphertext
-    modified_ciphertext = (original_ciphertext * pow(2, e, n)) % n
-    return modified_ciphertext
-
-# Main function to demonstrate RSA and MITM attack
 def main():
     # RSA Key Generation
-    e, d, n = rsa_key_generation()  # Generate RSA keys
+    e, d, n = rsa_key_generation()
     print("RSA Keys Generated:\n")
-    print(f"Public Key: (e={e}, n={n})")
-    print(f"Private Key: (d={d}, n={n})\n")
-
-    # Alice sends a message to Bob
+    print(f"Public Key: (e={e}, n={n})\n")
+    # Alice's original message
     message = "Hi Bob!"
     print(f"Alice's original message: {message}")
-
-    ciphertext = rsa_encrypt((e, n), message)  # Alice encrypts the message
-    print(f"\nEncrypted message (ciphertext): {ciphertext}")
-
-    # Mallory intercepts and modifies the ciphertext
-    modified_ciphertext = mitm_rsa_attack((e, n), ciphertext)
+    # Alice encrypts the message
+    ciphertext, original_m = rsa_encrypt((e, n), message)
+    print(f"\nAlice's ciphertext: {ciphertext}")
+    # Mallory's attack: Multiply ciphertext by 2^e mod n
+    attack_multiplier = 2
+    modified_ciphertext = (ciphertext * pow(attack_multiplier, e, n)) % n
     print(f"\nMallory's modified ciphertext: {modified_ciphertext}")
-
     # Bob decrypts the modified ciphertext
-    modified_decrypted_message = rsa_decrypt((d, n), modified_ciphertext)
-    print(f"\nBob's decrypted message after MITM attack: {modified_decrypted_message}")
+    decrypted_m = rsa_decrypt((d, n), modified_ciphertext)
+    print(f"\nBob's decrypted integer: {decrypted_m}")
+    # Expected decrypted integer (original_m * attack_multiplier) % n
+    expected_decrypted_m = (original_m * attack_multiplier) % n
+    print(f"Expected decrypted integer: {expected_decrypted_m}")
+    # Verify that Bob's decrypted message matches Mallory's expectation
+    if decrypted_m == expected_decrypted_m:
+        print("\nAttack successful: Bob's decrypted message matches Mallory's prediction.")
+    else:
+        print("\nAttack failed: Decrypted message does not match.")
+    # Attempt to decode the decrypted integer back to text (may not be valid UTF-8)
+    try:
+        decrypted_message = decrypted_m.to_bytes((decrypted_m.bit_length() + 7) // 8, byteorder='big').decode()
+        print(f"\nBob's decrypted message: {decrypted_message}")
+    except UnicodeDecodeError:
+        print("\nBob's decrypted message is not valid UTF-8 text.")
 
 if __name__ == "__main__":
     main()
